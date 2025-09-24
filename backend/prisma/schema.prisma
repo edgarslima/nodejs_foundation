@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+model User {
+  id            String   @id @default(uuid()) @db.Char(36)
+  email         String   @unique @db.VarChar(191)
+  passwordHash  String   @db.VarChar(255)
+  passwordAlgo  String   @db.VarChar(32)
+  role          UserRole @default(USER)
+  isActive      Boolean  @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  loginAttempts           LoginAttempt[]
+  emailVerificationTokens EmailVerificationToken[]
+}
+
+model RefreshToken {
+  id                String    @id @default(uuid()) @db.Char(36)
+  userId            String    @db.Char(36)
+  tokenHash         String    @db.VarChar(255)
+  issuedAt          DateTime  @default(now())
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?   @unique @db.Char(36)
+  ip                String?   @db.VarChar(64)
+  userAgent         String?   @db.VarChar(255)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedByToken RefreshToken?  @relation("RefreshTokenReplacement", fields: [replacedByTokenId], references: [id])
+  replacedTokens  RefreshToken[] @relation("RefreshTokenReplacement")
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Char(36)
+  userId    String   @db.Char(36)
+  tokenHash String   @db.VarChar(255)
+  reason    String   @db.VarChar(32)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  ip        String?  @db.VarChar(64)
+  userAgent String?  @db.VarChar(255)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid()) @db.Char(36)
+  userId    String?  @db.Char(36)
+  email     String   @db.VarChar(191)
+  ip        String?  @db.VarChar(64)
+  userAgent String?  @db.VarChar(255)
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([createdAt])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid()) @db.Char(36)
+  userId    String   @db.Char(36)
+  tokenHash String   @db.VarChar(255)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+model Channel {
+  id                 String    @id @default(uuid()) @db.Char(36)
+  channelCode        String    @unique
+  name               String    @db.VarChar(191)
+  description        String?   @db.Text
+  publishTokenCipher Bytes
+  publishTokenIv     Bytes
+  publishTokenTag    Bytes
+  lastPublishAt      DateTime?
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  createdByUserId    String?   @db.VarChar(36)
+  updatedByUserId    String?   @db.VarChar(36)
+
+  categories ChannelCategory[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
+model Category {
+  id                String            @id @default(uuid()) @db.Char(36)
+  name              String            @unique @db.VarChar(191)
+  youtubeCategoryId Int?
+
+  channels ChannelCategory[]
+}
+
+model ChannelCategory {
+  channelId  String @db.Char(36)
+  categoryId String @db.Char(36)
+
+  channel  Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, categoryId])
+  @@index([categoryId])
+  @@index([channelId])
+}

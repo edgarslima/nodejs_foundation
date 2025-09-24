@@ -1,0 +1,77 @@
+﻿services:
+  database:
+    build:
+      context: ./database
+    container_name: nodejs-foundation-database
+    restart: unless-stopped
+    ports:
+      - "${DATABASE_HOST_PORT:-3310}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD:-root_001}
+      MYSQL_DATABASE: ${DATABASE_NAME:-base_default}
+      MYSQL_USER: ${DATABASE_APP_USER:-app_user}
+      MYSQL_PASSWORD: ${DATABASE_APP_PASSWORD:-app_user_password}
+      MYSQL_ALLOW_EMPTY_PASSWORD: "no"
+    volumes:
+      - database_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: nodejs-foundation-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build:
+      context: ./backend
+    container_name: nodejs-foundation-backend
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      DATABASE_URL: "mysql://${BACKEND_DATABASE_USER:-app_user}:${BACKEND_DATABASE_PASSWORD:-app_user_password}@${BACKEND_DATABASE_HOST:-database}:${BACKEND_DATABASE_PORT:-3306}/${BACKEND_DATABASE_NAME:-base_default}"
+      REDIS_URL: ${BACKEND_REDIS_URL:-redis://redis:6379}
+      PORT: ${BACKEND_PORT:-3010}
+      HOST: ${BACKEND_HOST:-0.0.0.0}
+      LOG_LEVEL: ${BACKEND_LOG_LEVEL:-info}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-7d}
+      PASSWORD_PEPPER: ${PASSWORD_PEPPER:-change-me-pepper}
+      RESET_TOKEN_TTL: ${RESET_TOKEN_TTL:-20m}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe123!}
+    ports:
+      - "${BACKEND_PORT:-3010}:3010"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: nodejs-foundation-frontend
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${FRONTEND_API_BASE_URL:-http://localhost:3010}
+      ADMIN_UI_USE_CDN: ${ADMIN_UI_USE_CDN:-false}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    restart: unless-stopped
+
+volumes:
+  database_data:
+  redis_data:
